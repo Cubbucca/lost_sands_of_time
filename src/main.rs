@@ -1,3 +1,4 @@
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
 use bevy_inspector_egui::WorldInspectorPlugin;
 
@@ -20,8 +21,10 @@ fn main() {
             },
             ..default()
         }))
+        .add_plugin(LogDiagnosticsPlugin::default())
+        .add_plugin(FrameTimeDiagnosticsPlugin::default())
         .add_plugin(WorldInspectorPlugin::new())
-        .add_startup_system(asset_loading)
+        .add_system(setup_scene_once_loaded)
         .run();
 }
 
@@ -32,10 +35,14 @@ fn spawn_camera(mut commands: Commands) {
     });
 }
 
+#[derive(Resource)]
+struct Animations(Vec<Handle<AnimationClip>>);
+
 fn spawn_basic_scene(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    asset_server: Res<AssetServer>,
 ) {
     commands
         .spawn(PbrBundle {
@@ -63,13 +70,30 @@ fn spawn_basic_scene(
             ..default()
         })
         .insert(Name::new("PointLight"));
+    commands.insert_resource(Animations(vec![
+        asset_server.load("pocket2.glb#Animation0"),
+        asset_server.load("pocket2.glb#Animation0"),
+        asset_server.load("pocket2.glb#Animation0"),
+    ]));
+    commands.spawn(SceneBundle {
+        transform: Transform::from_xyz(0.0, 1.0, 0.0),
+        scene: asset_server.load("pocket2.glb#Scene0"),
+        ..default()
+    });
 }
 
-fn asset_loading(mut commands: Commands, assets: Res<AssetServer>) {
-    let scene0 = assets.load("pocket.glb#Scene0");
-    commands.spawn(SceneBundle {
-        scene: scene0,
-        transform: Transform::from_xyz(0.0, 2.0, 0.0).with_rotation(Quat::from_rotation_x(90.0)),
-        ..Default::default()
-    });
+fn setup_scene_once_loaded(
+    animations: Res<Animations>,
+    mut player: Query<&mut AnimationPlayer>,
+    mut done: Local<bool>,
+) {
+    if !*done {
+        if let Ok(mut player) = player.get_single_mut() {
+            player
+                .play(animations.0[0].clone_weak())
+                .set_speed(3.0)
+                .repeat();
+            *done = true;
+        }
+    }
 }
